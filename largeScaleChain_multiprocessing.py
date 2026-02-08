@@ -15,6 +15,7 @@ import sys
 import scipy as sp
 import json
 import psutil
+import config
 
 def largeScaleChain_mp(n_chains,n_workers,largeScaleChain,rf,initial_beds,rng_seeds,n_iters,output_path='./Data/output'):
     '''
@@ -430,20 +431,21 @@ def msc_run_wrapper(param_chain, param_run):
 if __name__=='__main__':
     # Set file paths here
     #NOTE use r string literals in case backslashes are used
-    glacier_data_path = Path(r'DenmanDataGridded.csv') 
-    sgs_bed_path = Path(r'sgs_bed_denman.txt')
-    data_weight_path = Path(r'data_weight_denman.txt')
-    seed_file_path = Path(r'../200_seeds.txt')
-    output_path = Path(r'./Data/Denman')
+    glacier_data_path = Path(r'data/BindSchalder_Macayeal_IceStreams.csv') 
+    sgs_bed_path = Path(r'sgs_beds/sgs_0_bindshadler_macayeal.txt')
+    data_weight_path = Path(r'data/data_weight_bindshalder_macayeal.txt')
+    seed_file_path = Path(r'200_seeds.txt')
+    output_path = Path(r'data/bindshadler_macayeal/')
 
     # Multiprocessing params
-    n_iter = 5000
-    offset_idx = 0 # Which seed to start from (0-9)
-    n_chains = 10
+    n_iter = 2000000
+    offset_idx = 5 # Which seed to start from (0-9)
+    n_chains = 5
     n_workers = psutil.cpu_count(logical=False)-1
 
     # load compiled bed elevation measurements
     df = pd.read_csv(glacier_data_path)
+    print(f'Shape of Glacier data: {df.shape}')
     
     rng_seed = 0
     
@@ -459,7 +461,7 @@ if __name__=='__main__':
     cols = len(x_uniq)
     rows = len(y_uniq)
     
-    resolution = 500
+    resolution = config.resolution
     
     xx, yy = np.meshgrid(x_uniq, y_uniq)
     
@@ -491,7 +493,7 @@ if __name__=='__main__':
     df['Nbed'] = transformed_data
     
     # randomly drop out 50% of coordinates. Decrease this value if you have a lot of data and it takes a long time to run
-    df_sampled = df.sample(frac=0.5, random_state=rng_seed)
+    df_sampled = df.sample(frac=0.15, random_state=rng_seed)
     df_sampled = df_sampled[df_sampled["cond_bed"].isnull() == False]
     df_sampled = df_sampled[df_sampled["bedmap_mask"]==1]
     
@@ -499,8 +501,8 @@ if __name__=='__main__':
     coords = df_sampled[['x','y']].values
     values = df_sampled['Nbed']
 
-    maxlag = 80000      # maximum range distance
-    n_lags = 60         # num of bins (try decreasing if this is taking too long)
+    maxlag = 90000      # maximum range distance
+    n_lags = 50         # num of bins (try decreasing if this is taking too long)
 
     # compute variogram
     V1 = skg.Variogram(coords, values, bin_func='even', 
@@ -530,7 +532,8 @@ if __name__=='__main__':
     mc_res_bm = Topography.get_mass_conservation_residual(bedmachine_bed,bedmap_surf,velx,vely,dhdt,smb,resolution)
     
     # in multiprocessing, we choose to only use mass flux residual loss in squared sum (Gaussian distribution)
-    largeScaleChain.set_loss_type(sigma_mc=5, massConvInRegion=True)
+    largeScaleChain.set_loss_type(sigma_mc = config.sigma3
+                                  , massConvInRegion=True)
     
     #range_max and range_min changes topographies features' lateral scale
     #by default, I set range_max to variogram range
@@ -548,10 +551,10 @@ if __name__=='__main__':
     # initialize a RandField instance to be used for all large scale chains
     rf1 = MCMC.RandField(range_min_x, range_max_x, range_min_y, range_max_y, scale_min, scale_max, nugget_max, random_field_model, isotropic, smoothness = smoothness)
     
-    min_block_x = 50
-    max_block_x = 80
-    min_block_y = 50
-    max_block_y = 80
+    min_block_x = config.T3_xmin_block
+    max_block_x = config.T3_xmax_block
+    min_block_y = config.T3_ymin_block
+    max_block_y = config.T3_ymax_block
     rf1.set_block_sizes(min_block_x, max_block_x, min_block_y, max_block_y)
     
     logis_func_L = 2
@@ -580,7 +583,8 @@ if __name__=='__main__':
     
     initial_beds = []
     for i in range(n_chains):
-        sgs_bed = np.loadtxt('Denman_sgs_bed_'+str(i)+'.txt')
+        # Sample name sgs_beds/sgs_1250680260_bindshadler_macayeal.txt
+        sgs_bed = np.loadtxt(f'./sgs_beds/sgs_{str(i)}_bindshadler_macayeal.txt')
         initial_beds.append(sgs_bed)
     #initial_beds = np.array([sgs_bed] * n_chains) # np.repeat(sgs_bed, n_chains)
     
@@ -596,19 +600,17 @@ if __name__=='__main__':
         #print(i, rng_seeds[i])
         ls_seed = rng_seeds[i]
         ls_seed_folder = output_path / 'LargeScaleChain' / f'{str(ls_seed)[:6]}'
-        ls_seed_folder.mkdir(parents=True, exist_ok=True)
 
-# =============================================================================
-#         ss_chain_folder = ls_seed_folder / 'SmallScaleChain'
-#         ss_chain_folder.mkdir(parents=True, exist_ok=True)
-# 
-#         # For each large scale chain, create 20 small scale chain folders
-#         for j in range(i*20, i*20 + 20):
-#             #print('\t', j,  rng_seeds[j])
-#             ss_seed = rng_seeds[j]
-#             ss_seed_folder = ss_chain_folder / f'{str(ss_seed)[:6]}'
-#             ss_seed_folder.mkdir(parents=True, exist_ok=True)
-# =============================================================================
+        ls_seed_folder.mkdir(parents=True, exist_ok=True)
+        ss_chain_folder = ls_seed_folder / 'SmallScaleChain'
+        ss_chain_folder.mkdir(parents=True, exist_ok=True)
+ 
+        # For each large scale chain, create 20 small scale chain folders
+        for j in range(i*20, i*20 + 20):
+             #print('\t', j,  rng_seeds[j])
+             ss_seed = rng_seeds[j]
+             ss_seed_folder = ss_chain_folder / f'{str(ss_seed)[:6]}'
+             ss_seed_folder.mkdir(parents=True, exist_ok=True)
     
     # Use the offset to select the appropriate seeds for the large scale chain
     selected_rng_seeds = rng_seeds[offset_idx:min(offset_idx + n_chains, len(rng_seeds[:-n_chains]))]
