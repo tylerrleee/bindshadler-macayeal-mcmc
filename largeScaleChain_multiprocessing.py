@@ -439,7 +439,7 @@ if __name__=='__main__':
 
     # Multiprocessing params
     n_iter = 2000000
-    offset_idx = 5 # Which seed to start from (0-9)
+    offset_idx = 0 # Which seed to start from (0-9)
     n_chains = 5
     n_workers = psutil.cpu_count(logical=False)-1
 
@@ -582,20 +582,24 @@ if __name__=='__main__':
     largeScaleChain.set_random_generator(rng_seed = rng_seed)
     
     initial_beds = []
+    """
     for i in range(n_chains):
         # Sample name sgs_beds/sgs_1250680260_bindshadler_macayeal.txt
         sgs_bed = np.loadtxt(f'./sgs_beds/sgs_{str(i)}_bindshadler_macayeal.txt')
         initial_beds.append(sgs_bed)
     #initial_beds = np.array([sgs_bed] * n_chains) # np.repeat(sgs_bed, n_chains)
-    
+    """
+
     with open(Path(seed_file_path), 'r') as f:
         lines = f.readlines()
     
     rng_seeds = []
     for line in lines:
         rng_seeds.append(int(line.strip()))
-        
+    
+
     # Create output directory for all results
+    
     for i in range(0, n_chains):
         #print(i, rng_seeds[i])
         ls_seed = rng_seeds[i]
@@ -604,7 +608,13 @@ if __name__=='__main__':
         ls_seed_folder.mkdir(parents=True, exist_ok=True)
         ss_chain_folder = ls_seed_folder / 'SmallScaleChain'
         ss_chain_folder.mkdir(parents=True, exist_ok=True)
- 
+
+        # Open last bed from seed
+
+        seed_th_path = ls_seed_folder / 'bed_3000k.txt'
+        seedth_bed = np.loadtxt(seed_th_path)
+        initial_beds.append(seedth_bed)
+
         # For each large scale chain, create 20 small scale chain folders
         for j in range(i*20, i*20 + 20):
              #print('\t', j,  rng_seeds[j])
